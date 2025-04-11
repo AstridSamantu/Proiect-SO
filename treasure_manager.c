@@ -306,7 +306,7 @@ char *getOP(int argc, char *argv[])
     if (operation == NULL)
     {
         printf("Error at dynamic allocation\n");
-        return NULL;
+        exit(-2);
     }
     operation[0] = '\0';
     for (int i = 0; i < argc; i++)
@@ -360,7 +360,7 @@ char *getOP(int argc, char *argv[])
     }
     else
     {
-        fprintf(stderr, "Invalid command!\n");
+        printf("Invalid command!\n");
         printUsage();
         exit(-1);
     }
