@@ -305,7 +305,7 @@ char *getOP(int argc, char *argv[])
     char *operation = malloc(initial_size * sizeof(char));
     if (operation == NULL)
     {
-        printf("Error at dynamic allocation\n");
+        printf("Error when allocating memory\n");
         exit(-2);
     }
     operation[0] = '\0';
