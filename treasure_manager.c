@@ -284,7 +284,62 @@ void remove_hunt(char *huntID)
   if(found==0)
     printf("There is no hunt to delete\n");
   closedir(folder);
- 
+}
+void list_hunts(char *op)
+{
+    DIR *folder = NULL;
+    struct dirent *item = NULL;
+    struct stat info;
+    int ok = 0;
+
+    if((folder=opendir("."))==NULL)
+      {
+        printf("Error when opening folder\n");
+        exit(-2);
+      }
+
+    while((item=readdir(folder))!=NULL)
+      {
+        char itemName[256];
+        strcpy(itemName,item->d_name);
+        if(itemName[0]=='.'||strcmp(itemName,"input")== 0||strcmp(itemName,"build")==0)
+	  {
+            continue;
+	  }
+        if(lstat(itemName,&info)<0)
+	  {
+            printf("Error reading statistics from file\n");
+            exit(-2);
+	  }
+
+        if(S_ISDIR(info.st_mode))
+	  {
+            int number = 0;
+            char path[512];
+            sprintf(path,"%s/%s",itemName,itemName);
+            int file;
+            if((file=open(path,O_RDONLY))<0)
+	      {
+                printf("Error opening treasure file for reading\n");
+                exit(-2);
+	      }
+            Treasure buffer[100];
+            int numberOfTreasureRead;
+            while((numberOfTreasureRead=read(file,&buffer,100*sizeof(Treasure)))>0)
+	      {
+                number=number+(numberOfTreasureRead/sizeof(Treasure));
+	      }
+            close(file);
+            printf("%s has %d treasure hunts\n", itemName, number);
+            log_op(itemName, op);
+            ok = 1;
+        }
+    }
+    if(ok==0)
+      {
+        printf("There are no hunts\n");
+      }
+    closedir(folder);
 }
 void printUsage()
 {
@@ -294,6 +349,7 @@ void printUsage()
     printf("  --view <hunt_id> <treasure_id>\n");
     printf("  --remove_treasure <hunt_id> <treasure_id>\n");
     printf("  --remove_hunt <hunt_id>\n");
+    printf("  --list_hunts\n");
 }
 char *getOP(int argc, char *argv[])
 {
@@ -323,7 +379,7 @@ char *getOP(int argc, char *argv[])
 
  int main(int argc, char *argv[])
 {
-    if (argc < 3 || argc>4)
+    if (argc < 2 || argc>4)
     {
         printUsage();
         exit(-1);
@@ -357,6 +413,11 @@ char *getOP(int argc, char *argv[])
     {
         remove_hunt(argv[2]);
 	free(operation);
+    }
+    else if(strcmp(argv[1], "--list_hunts") == 0)
+    {
+      list_hunts(operation);
+      free(operation);
     }
     else
     {
