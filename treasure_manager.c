@@ -330,7 +330,7 @@ void list_hunts(char *op)
                 number=number+(numberOfTreasureRead/sizeof(Treasure));
 	      }
             close(file);
-            printf("%s has %d treasure hunts\n", itemName, number);
+            printf("%s has %d treasures\n", itemName, number);
             log_op(itemName, op);
             ok = 1;
         }

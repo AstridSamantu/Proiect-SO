@@ -2,13 +2,29 @@
 #include<string.h>
 #include<stdlib.h>
 #include<unistd.h>
+#include<signal.h>
 #include<fcntl.h>
 #include<stdarg.h>
 #include<stdbool.h>
 #include<sys/wait.h>
+#include<sys/stat.h>
+#include<dirent.h>
+
 
 pid_t monitorPID=-1;
 bool monitor_shutdown=false;
+int pfd[2];
+
+void read_pipe(int file)
+{
+  char buffer[4096];
+  int bytes_read;
+  if((bytes_read=read(file,buffer,4095))>0)
+    {
+      buffer[bytes_read]='\0';
+      printf("%s",buffer);
+    }
+}
 
 void sigchld_handler(int sig)
 {
@@ -95,7 +111,6 @@ void monitor_handler_usr1(int sig)
 }
 void monitor_handler_sigterm(int sig)
 {
-  printf("Monitor shutting down\n");
   sleep(10);
   exit(EXIT_SUCCESS);
 }
@@ -122,6 +137,11 @@ void child_process(void)
 }
 void startMonitor(void)
 {
+   if(pipe(pfd)<0)
+      {
+        printf("Error when creating pipe!\n");
+        exit(-1);
+      }
     if ((monitorPID=fork())<0)
       {
         fprintf(stderr,"Failed to fork monitor process\n");
@@ -129,12 +149,14 @@ void startMonitor(void)
       }
     if (monitorPID==0)
       {
+	close(pfd[0]);
+	dup2(pfd[1],1);
         child_process();
         exit(EXIT_SUCCESS);
       }
+    close(pfd[1]);
     printf("Monitor process started with PID %d\n", monitorPID);
 }
-
 char *getOP(const int n, ...)
 {
   char *operation=NULL;
@@ -185,6 +207,60 @@ void writeOP(char *command)
   free(command);
 }
 
+void calculate_score(void)
+{
+  int cs_pfd[2];
+  DIR *folder=NULL;
+  struct dirent *item=NULL;
+  struct stat info;
+
+  if(pipe(cs_pfd)<0)
+    {
+      printf("Error when creating pipe!\n");
+      exit(-1);
+    }
+  if((folder=opendir("."))==NULL)
+    {
+      printf("Error when opening folder!\n");
+      exit(-1);
+    }
+  while((item=readdir(folder))!=NULL)
+    {
+      char itemName[256];
+      strcpy(itemName,item->d_name);
+       if (itemName[0] == '.' || strcmp(itemName, "input") == 0 || strcmp(itemName, "build") == 0)
+	 {
+            continue;
+	 }
+       if(lstat(itemName,&info)<0)
+	 {
+	    printf("Error when  reading statistics!\n");
+            exit(-1);
+	 }
+       if(S_ISDIR(info.st_mode))
+	 {
+	   pid_t pid;
+	   if((pid=fork())<0)
+	     {
+	       fprintf(stderr, "Failed fork!\n");
+	       exit(-1);
+	     }
+	   if(pid==0)
+	     {
+	       close(cs_pfd[0]);
+	       dup2(cs_pfd[1],1);
+	       execlp("./score", "./score",itemName,NULL);
+	       fprintf(stderr,"Failed to execute program!\n");
+	       exit(-1);
+	     }
+	   close(cs_pfd[1]);
+	   read_pipe(cs_pfd[0]);
+	 }
+    }
+  close(cs_pfd[0]);
+  closedir(folder);
+}
+
 void parent_process(void)
 {
     char command[50];
@@ -208,9 +284,10 @@ void parent_process(void)
                 printf("Monitor is already running with PID %d\n",monitorPID);
                 continue;
 	      }
+	    close(pfd[0]);
             remove("tempOP.txt");
             break;
-        }
+	  }
 	else if(strcmp(command,"start_monitor")==0)
 	  {
             if (monitorPID>0)
@@ -236,6 +313,7 @@ void parent_process(void)
                     fprintf(stderr,"Failed to send SIGUSR1 to monitor\n");
                     exit(EXIT_FAILURE);
 		  }
+		read_pipe(pfd[0]);
             }
         }
 	else if(strcmp(command,"list_treasures")==0)
@@ -256,9 +334,10 @@ void parent_process(void)
                     fprintf(stderr, "Failed to send SIGUSR1 to monitor\n");
                     exit(EXIT_FAILURE);
 		  }
+		read_pipe(pfd[0]);
             }
         }
-	else if(strcmp(command,"view_treasures")==0)
+	else if(strcmp(command,"view_treasure")==0)
 	  {
             if (monitorPID==-1)
 	      {
@@ -282,8 +361,13 @@ void parent_process(void)
                     fprintf(stderr, "Failed to send SIGUSR1 to monitor\n");
                     exit(EXIT_FAILURE);
 		  }
+		read_pipe(pfd[0]);
 	      }
         }
+	else if (strcmp(command,"calculate_score")==0)
+	  {
+	    calculate_score();
+	  }
 	else if(strcmp(command,"stop_monitor")==0)
 	  {
             if (monitorPID == -1)
